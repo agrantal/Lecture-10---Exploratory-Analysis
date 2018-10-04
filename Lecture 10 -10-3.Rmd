@@ -1,0 +1,148 @@
+---
+title: "Lecture 10 - 10-3"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+#import weather data
+weather_df = 
+  rnoaa::meteo_pull_monitors(c("USW00094728", "USC00519397", "USS0023B17S"),
+                      var = c("PRCP", "TMIN", "TMAX"), 
+                      date_min = "2016-01-01",
+                      date_max = "2016-12-31") %>%
+  mutate(
+    name = recode(id, USW00094728 = "CentralPark_NY", 
+                      USC00519397 = "Waikiki_HA",
+                      USS0023B17S = "Waterhole_WA"),
+    tmin = tmin / 10,
+    tmax = tmax / 10,
+    month = lubridate::floor_date(date, unit = "month")) %>%        #to create a 'month' variable 
+  select(name, id, date, month, everything())
+```
+
+#Group_by
+- 'group_by()' to group vars by categorical vars before performing subsequent functions
+- 'summarise()' to create one-number summaries within each group 
+- 'mutate()' to define vars within groups
+```{r}
+weather_df %>%
+  group_by(name, month)       #can use 'ungroup_by()' to remove groupings
+weather_df
+```
+
+#Counting things 
+
+```{r}
+weather_df %>%
+  count(month)              #count # of elements within a group, e.g. 93 in Janurary 2016 (not limited to any particular park name)
+
+weather_df %>%
+  group_by(name, month) %>%
+  summarize(n = n())        #counts the # of elements within a group within another group, e.g. 31 observations in january 2016 in central park specifically
+
+weather_df %>%
+  group_by(month) %>%
+  summarize(n_obs = n(),
+            n_days = n_distinct(date))  #to find the # of distinct 'date' values within each month 
+```
+
+#General Summaries
+
+```{r}
+#group by one var 
+weather_df %>%
+  group_by(month) %>%
+  summarize(n = n(),
+            mean_tmax = mean(tmax),
+            mean_prec = mean(prcp, na.rm = TRUE),  #can't take mean of a var if it has even a single missing datapoint, so use 'na.rm = TRUE' to remove all the missing vars 
+            median_tmax = median(tmax),
+            sd_tmax = sd(tmax))
+
+#other functions: mean(), median(), var(), sd(), mad(), IQR() = interquartile range, min(), and max()
+
+#Group by more than one var
+weather_df %>%
+  group_by(name, month) %>%
+  summarize(number = n(), 
+            mean_tmax = mean(tmax, na.rm = TRUE),
+            median_prcp = median(prcp, na.rm = TRUE),
+            sd_tmin = sd(tmin, na.rm = TRUE))
+```
+#plot two tibbles at once
+```{r}
+weather_df %>%
+  group_by(name, month) %>%
+  summarize(mean_tmax = mean(tmax)) %>%
+  ggplot(aes(x = month, y = mean_tmax, color = name)) + 
+    geom_point() + geom_line() + 
+    theme(legend.position = "bottom")
+```
+
+#tidy is not always best 
+```{r}
+weather_df %>%
+  group_by(name, month) %>%
+  summarize(mean_tmax = mean(tmax, na.rm = TRUE)) %>% 
+  spread(key = name, value = mean_tmax) %>%     #untidy dataset in a long format by changing it to a short format so its easier to work with. Remember, key = the new column name 
+  knitr::kable(digits = 3)
+```
+
+#Grouped mutate
+```{r}
+weather_df %>%
+  group_by(name, month) %>%
+  mutate(mean_tmax = mean(tmax, na.rm = TRUE))
+               #mutate within the dataset that's already been grouped by name. Add a column that takes the mean of tmax within each park name 
+ 
+
+weather_df %>%
+  group_by(name) %>%
+  mutate(mean_tmax = mean(tmax, na.rm = TRUE),      #
+         centered_tmax = tmax - mean(tmax)) %>%     #mutate within the dataset that's already been grouped by name. Add a column that takes the mean of tmax within each park name. Also add a column called 'centered_tmax' that relates extreme temp maxes to the mean.  
+  ggplot(aes(x = date, y = centered_tmax, color = name)) + 
+    geom_point() 
+```
+
+#Window functions
+if ask it to compute mean of 30 numbers, it'll spit out 30 numbers (one value repeated 30 times)
+```{r}
+weather_df %>%
+  group_by(name, month) %>%
+  mutate(tmax_rank = min_rank(tmax))         #what is the ordering of values within a specific group. Useful if want to know the coldest or warmest day in a certain month
+
+weather_df %>%
+  group_by(name, month) %>%
+  mutate(tmax_rank = min_rank(tmax)) %>%
+  filter(min_rank(tmax) < 2)          #can see coldest day (rank = 1) within each month so ask for < 2
+
+weather_df %>%
+  group_by(name, month) %>%
+  mutate(tmax_rank = min_rank(tmax)) %>%
+  filter(min_rank(desc(tmax)) < 4)      # keep the three days with the highest tmax
+
+weather_df %>%
+  group_by(name) %>%
+  mutate(temp_change = tmax - lag(tmax))    #use lags to compare an obs to the previous value. E.g. to find daily change in tmax within each station within a year
+
+weather_df %>%
+  group_by(name) %>%
+  mutate(one_day_change = tmax - lag(tmax)) %>%
+  summarize(sd_one_day_change = sd(one_day_change, na.rm = TRUE)) #find day to day variability at each of the three stations. now, can use to compare among the stations
+```
+
+#Limitations
+summarise() can only be used with functions that return single-number summary, so can't use for linear regressions and more complex functions
+
+#Learning Asessment
+In the PULSE data, the primary outcome is BDI score; it’s observed over follow-up visits, and we might ask if the typical BDI score values are roughly similar at each. Try to write a code chunk that imports, cleans, and summarizes the PULSE data to examine the mean and median at each visit. 
+```{r}
+
+group_by(BDI, visit)
+```
+
+#Learning assessment
+In the FAS data, there are several outcomes of interest; for now, focus on post-natal day on which a pup is able to pivot. Two predictors of interest are the dose level and the day of treatment. 
+```{r}
+```
+
